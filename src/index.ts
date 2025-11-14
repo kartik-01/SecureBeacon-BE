@@ -5,6 +5,7 @@ import { env } from './config/env';
 import { connectToDatabase } from './config/db';
 import analysesRouter from './routes/analyses';
 import saveResultsRouter from './routes/saveResults';
+import encryptionRouter from './routes/encryption';
 
 async function bootstrap() {
   await connectToDatabase();
@@ -32,6 +33,7 @@ async function bootstrap() {
 
   app.use('/api/analyses', analysesRouter);
   app.use('/api/saveResults', saveResultsRouter);
+  app.use('/api/encryption', encryptionRouter);
 
   app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     if (err.name === 'UnauthorizedError') {

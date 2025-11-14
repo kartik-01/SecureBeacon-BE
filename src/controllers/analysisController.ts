@@ -5,9 +5,10 @@ import { AuthRequest } from '../middleware/auth';
 
 type CreateAnalysisBody = {
   inputType?: InputType;
-  inputContent?: string;
-  analysisContext?: Record<string, unknown>;
-  mlResult?: MLResult;
+  inputContent?: string; // Encrypted JSON string
+  analysisContext?: string | Record<string, unknown>; // Encrypted JSON string or object (for backward compatibility)
+  mlResult?: MLResult | string; // Encrypted JSON string or object (for backward compatibility)
+  userEmail?: string; // Encrypted JSON string
 };
 
 function serializeAnalysis(doc: AnalysisDocument) {
@@ -39,7 +40,7 @@ export async function createAnalysis(req: AuthRequest, res: Response) {
     ? userEmailRaw
     : `${userSub.replace(/\W+/g, '_')}@securebeacon.app`;
 
-  const { inputType, inputContent, analysisContext, mlResult: providedMlResult } = req.body as CreateAnalysisBody;
+  const { inputType, inputContent, analysisContext, mlResult: providedMlResult, userEmail: providedUserEmail } = req.body as CreateAnalysisBody;
 
   if (!inputType || !['url', 'header', 'eml'].includes(inputType)) {
     return res.status(400).json({ message: 'inputType must be one of url, header, eml' });
@@ -49,21 +50,40 @@ export async function createAnalysis(req: AuthRequest, res: Response) {
     return res.status(400).json({ message: 'inputContent is required' });
   }
 
+  // Use provided userEmail if available (encrypted), otherwise use fallback
+  const finalUserEmail = providedUserEmail || userEmail;
+
   try {
-    // Use provided ML result if available, otherwise call ML service
-    const mlResult = providedMlResult && 
+    // Check if mlResult is encrypted (string) or plain object (for backward compatibility)
+    let mlResult: string | MLResult;
+    if (typeof providedMlResult === 'string') {
+      // Encrypted string - store as-is
+      mlResult = providedMlResult;
+    } else if (providedMlResult && 
+      typeof providedMlResult === 'object' &&
       typeof providedMlResult.is_phishing === 'boolean' && 
-      typeof providedMlResult.phishing_probability === 'number'
-      ? providedMlResult
-      : await getMLResult(inputType, inputContent);
-    const normalizedContext =
-      analysisContext && typeof analysisContext === 'object' && !Array.isArray(analysisContext)
-        ? analysisContext
-        : undefined;
+      typeof providedMlResult.phishing_probability === 'number') {
+      // Plain object (backward compatibility) - store as JSON string
+      mlResult = JSON.stringify(providedMlResult);
+    } else {
+      // No ML result provided - this shouldn't happen with encryption, but handle gracefully
+      // For encrypted data, ML result should always be provided
+      return res.status(400).json({ message: 'mlResult is required' });
+    }
+
+    // Handle analysisContext - can be encrypted string or object
+    let normalizedContext: string | undefined;
+    if (typeof analysisContext === 'string') {
+      // Encrypted string - store as-is
+      normalizedContext = analysisContext;
+    } else if (analysisContext && typeof analysisContext === 'object' && !Array.isArray(analysisContext)) {
+      // Plain object (backward compatibility) - store as JSON string
+      normalizedContext = JSON.stringify(analysisContext);
+    }
 
     const record = await AnalysisModel.create({
       userSub,
-      userEmail,
+      userEmail: finalUserEmail,
       inputType,
       inputContent,
       analysisContext: normalizedContext,

@@ -9,11 +9,11 @@ export interface MLResult {
 
 export interface AnalysisDocument extends Document {
   userSub: string;
-  userEmail: string;
+  userEmail: string; // Can be encrypted JSON string or plain string
   inputType: InputType;
-  inputContent: string;
-  analysisContext?: Record<string, unknown>;
-  mlResult: MLResult;
+  inputContent: string; // Can be encrypted JSON string or plain string
+  analysisContext?: string | Record<string, unknown>; // Can be encrypted JSON string or object
+  mlResult: string | MLResult; // Can be encrypted JSON string or object
   createdAt: Date;
   updatedAt: Date;
 }
@@ -28,11 +28,8 @@ const AnalysisSchema = new Schema<AnalysisDocument>(
       enum: ['url', 'header', 'eml'],
     },
     inputContent: { type: String, required: true },
-    analysisContext: { type: Schema.Types.Mixed },
-    mlResult: {
-      is_phishing: { type: Boolean, required: true },
-      phishing_probability: { type: Number, required: true },
-    },
+    analysisContext: { type: Schema.Types.Mixed }, // Can store string or object
+    mlResult: { type: Schema.Types.Mixed, required: true }, // Can store encrypted JSON string or object
   },
   {
     timestamps: true,
