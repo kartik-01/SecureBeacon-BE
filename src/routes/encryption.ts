@@ -79,5 +79,141 @@ router.post('/salt', requireAuth, async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Get current unlock rate limit status for user
+router.get('/unlock-status', requireAuth, async (req: AuthRequest, res: Response) => {
+  const userSub = typeof req.auth?.sub === 'string' ? (req.auth?.sub as string) : null;
+  if (!userSub) {
+    return res.status(401).json({ message: 'User authentication required' });
+  }
+
+  try {
+    const userSalt = await UserSaltModel.findOne({ userSub });
+    const now = Date.now();
+
+    if (userSalt && userSalt.lockedUntil > 0 && now < userSalt.lockedUntil) {
+      // Still locked
+      return res.json({
+        isLocked: true,
+        lockedUntil: userSalt.lockedUntil,
+        remainingSeconds: Math.ceil((userSalt.lockedUntil - now) / 1000),
+        attempts: userSalt.unlockAttempts,
+      });
+    } else if (userSalt && userSalt.lockedUntil > 0 && now >= userSalt.lockedUntil) {
+      // Lockout expired, clear it
+      await UserSaltModel.findOneAndUpdate(
+        { userSub },
+        { unlockAttempts: 0, lockedUntil: 0 }
+      );
+    }
+
+    // Check if user has failed attempts (not locked yet)
+    return res.json({
+      isLocked: false,
+      lockedUntil: null,
+      remainingSeconds: 0,
+      attempts: userSalt?.unlockAttempts || 0,
+    });
+  } catch (error) {
+    console.error('[getUnlockStatus] error', error);
+    return res.status(500).json({ message: 'Failed to retrieve unlock status' });
+  }
+});
+
+// Lock user for failed unlock attempts (called by frontend)
+router.post('/lock-user', requireAuth, async (req: AuthRequest, res: Response) => {
+  const userSub = typeof req.auth?.sub === 'string' ? (req.auth?.sub as string) : null;
+  if (!userSub) {
+    return res.status(401).json({ message: 'User authentication required' });
+  }
+
+  const { lockedUntil, attempts } = req.body;
+  if (typeof lockedUntil !== 'number' || typeof attempts !== 'number') {
+    return res.status(400).json({ message: 'Invalid lockout parameters' });
+  }
+
+  try {
+    await UserSaltModel.findOneAndUpdate(
+      { userSub },
+      { unlockAttempts: attempts, lockedUntil },
+      { upsert: true, new: true }
+    );
+
+    return res.json({
+      message: 'User locked',
+      lockedUntil,
+      remainingSeconds: Math.ceil((lockedUntil - Date.now()) / 1000),
+    });
+  } catch (error) {
+    console.error('[lockUser] error', error);
+    return res.status(500).json({ message: 'Failed to lock user' });
+  }
+});
+
+// Clear user's rate limit lock (admin/manual reset or after lockout expires)
+router.post('/unlock-user', requireAuth, async (req: AuthRequest, res: Response) => {
+  const userSub = typeof req.auth?.sub === 'string' ? (req.auth?.sub as string) : null;
+  if (!userSub) {
+    return res.status(401).json({ message: 'User authentication required' });
+  }
+
+  try {
+    await UserSaltModel.findOneAndUpdate(
+      { userSub },
+      { unlockAttempts: 0, lockedUntil: 0 },
+      { upsert: true, new: true }
+    );
+    return res.json({ message: 'User unlocked' });
+  } catch (error) {
+    console.error('[unlockUser] error', error);
+    return res.status(500).json({ message: 'Failed to unlock user' });
+  }
+});
+
+// Save failed unlock attempts (before lockout)
+router.post('/save-attempts', requireAuth, async (req: AuthRequest, res: Response) => {
+  const userSub = typeof req.auth?.sub === 'string' ? (req.auth?.sub as string) : null;
+  if (!userSub) {
+    return res.status(401).json({ message: 'User authentication required' });
+  }
+
+  const { attempts } = req.body;
+  if (typeof attempts !== 'number' || attempts < 0 || attempts > 5) {
+    return res.status(400).json({ message: 'Invalid attempts value' });
+  }
+
+  try {
+    // Store attempts in database (not locked, just tracking)
+    await UserSaltModel.findOneAndUpdate(
+      { userSub },
+      { unlockAttempts: attempts, lockedUntil: 0 },
+      { upsert: true, new: true }
+    );
+
+    return res.json({ message: 'Attempts saved', attempts });
+  } catch (error) {
+    console.error('[saveAttempts] error', error);
+    return res.status(500).json({ message: 'Failed to save attempts' });
+  }
+});
+
+// Get current unlock attempts (for recovery)
+router.get('/unlock-attempts', requireAuth, async (req: AuthRequest, res: Response) => {
+  const userSub = typeof req.auth?.sub === 'string' ? (req.auth?.sub as string) : null;
+  if (!userSub) {
+    return res.status(401).json({ message: 'User authentication required' });
+  }
+
+  try {
+    const userSalt = await UserSaltModel.findOne({ userSub });
+    return res.json({
+      attempts: userSalt?.unlockAttempts || 0,
+      lockedUntil: userSalt?.lockedUntil || 0,
+    });
+  } catch (error) {
+    console.error('[getUnlockAttempts] error', error);
+    return res.status(500).json({ message: 'Failed to get attempts' });
+  }
+});
+
 export default router;
 
