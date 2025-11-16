@@ -1,6 +1,6 @@
 import { Schema, model, Document } from 'mongoose';
 
-export type InputType = 'url' | 'header' | 'eml';
+export type InputType = 'header' | 'eml';
 
 export interface MLResult {
   is_phishing: boolean;
@@ -25,7 +25,7 @@ const AnalysisSchema = new Schema<AnalysisDocument>(
     inputType: {
       type: String,
       required: true,
-      enum: ['url', 'header', 'eml'],
+      enum: ['header', 'eml'],
     },
     inputContent: { type: String, required: true },
     analysisContext: { type: Schema.Types.Mixed }, // Can store string or object

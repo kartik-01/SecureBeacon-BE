@@ -42,8 +42,8 @@ export async function createAnalysis(req: AuthRequest, res: Response) {
 
   const { inputType, inputContent, analysisContext, mlResult: providedMlResult, userEmail: providedUserEmail } = req.body as CreateAnalysisBody;
 
-  if (!inputType || !['url', 'header', 'eml'].includes(inputType)) {
-    return res.status(400).json({ message: 'inputType must be one of url, header, eml' });
+  if (!inputType || !['header', 'eml'].includes(inputType)) {
+    return res.status(400).json({ message: 'inputType must be one of header, eml' });
   }
 
   if (!inputContent || typeof inputContent !== 'string' || inputContent.trim().length === 0) {
