@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: securebeacon-backend
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: MONGODB_URI
+        sync: false
+      - key: AUTH0_DOMAIN
+        sync: false
+      - key: AUTH0_AUDIENCE
+        sync: false
+      - key: ML_API_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+
